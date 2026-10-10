@@ -20,8 +20,9 @@ fun HistoryScreen(viewModel: AppViewModel = viewModel()) {
     val jobs by viewModel.allJobs.collectAsState()
     val historyJobs = jobs.filter { 
         it.status == DownloadStatus.VALIDATED || 
-        it.status == DownloadStatus.COMPLETED ||
+        it.status == DownloadStatus.VERIFIED ||
         it.status == DownloadStatus.FAILED ||
+        it.status == DownloadStatus.INCOMPLETE ||
         it.status == DownloadStatus.DUPLICATE
     }
 

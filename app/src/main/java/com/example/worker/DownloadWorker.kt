@@ -4,88 +4,216 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.LRgetBDApplication
-import com.example.data.MockSourceAdapter
+import com.example.data.OfficialEporchaAdapter
+import com.example.data.SourceDownloadResult
+import com.example.data.TestMockAdapter
+import com.example.model.DownloadJob
 import com.example.model.DownloadStatus
+import com.example.util.ArchiveFileManager
+import com.example.util.PdfValidator
+import com.example.util.SettingsManager
 import java.io.File
-import java.security.MessageDigest
+import kotlinx.coroutines.flow.firstOrNull
 
-class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+class DownloadWorker(
+    context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
+
     override suspend fun doWork(): Result {
         val database = (applicationContext as LRgetBDApplication).database
         val dao = database.downloadJobDao()
-        val adapter = MockSourceAdapter()
+        val archiveManager = ArchiveFileManager(applicationContext)
+        val settingsManager = SettingsManager(applicationContext)
 
-        // Get one pending job
-        // In a real app, we might get multiple or be triggered with a specific ID
-        // For now, let's just pick one pending
-        // Better: receive job ID in inputData
-        val jobId = inputData.getLong("jobId", -1)
+        val jobId = inputData.getLong("jobId", -1L)
+        val isDevTestMode = inputData.getBoolean("devTestMode", false)
+
         if (jobId == -1L) return Result.failure()
 
         val job = dao.getJobById(jobId) ?: return Result.failure()
-        
+
+        // Check if job was paused or cancelled before execution
+        if (job.status == DownloadStatus.PAUSED || job.status == DownloadStatus.CANCELLED) {
+            return Result.success()
+        }
+
         dao.updateStatus(jobId, DownloadStatus.DOWNLOADING)
 
+        // Select adapter strictly: Never allow mock to masquerade as official in production
+        val adapter = if (isDevTestMode) {
+            TestMockAdapter(returnValidPdf = true)
+        } else {
+            OfficialEporchaAdapter()
+        }
+
         val cacheDir = applicationContext.cacheDir
-        val partFile = File(cacheDir, "job_${jobId}.part")
-        
-        val result = adapter.download(job, partFile)
-        
-        return when (result) {
-            is com.example.data.DownloadResult.Success -> {
-                // Validate PDF
-                if (validatePdf(partFile)) {
-                    val checksum = calculateChecksum(partFile)
-                    // Move to final location (simplified for now, using cache as "final")
-                    val finalFile = File(applicationContext.filesDir, "validated_${jobId}.pdf")
-                    partFile.renameTo(finalFile)
-                    
-                    dao.updateJob(job.copy(
-                        status = DownloadStatus.VALIDATED,
-                        filePath = finalFile.absolutePath,
-                        checksum = checksum,
-                        updatedAt = System.currentTimeMillis()
-                    ))
+        val tempPartFile = File(cacheDir, "job_${jobId}_${System.currentTimeMillis()}.part")
+
+        try {
+            val result = adapter.downloadRecord(job, tempPartFile)
+
+            return when (result) {
+                is SourceDownloadResult.SourceUnverified -> {
+                    tempPartFile.delete()
+                    dao.updateJob(
+                        job.copy(
+                            status = DownloadStatus.SOURCE_UNVERIFIED,
+                            sourceName = adapter.sourceName,
+                            errorMessage = result.explanationBn,
+                            errorCode = "ERR_SOURCE_UNVERIFIED",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
                     Result.success()
-                } else {
-                    dao.updateJob(job.copy(
-                        status = DownloadStatus.FAILED,
-                        errorMessage = "Invalid PDF signature",
-                        updatedAt = System.currentTimeMillis()
-                    ))
-                    Result.failure()
+                }
+
+                is SourceDownloadResult.AccessRestricted -> {
+                    tempPartFile.delete()
+                    dao.updateJob(
+                        job.copy(
+                            status = DownloadStatus.ACCESS_RESTRICTED,
+                            sourceName = adapter.sourceName,
+                            errorMessage = result.reasonBn,
+                            errorCode = "ERR_ACCESS_RESTRICTED",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                    Result.success()
+                }
+
+                is SourceDownloadResult.AuthRequired -> {
+                    tempPartFile.delete()
+                    dao.updateJob(
+                        job.copy(
+                            status = DownloadStatus.AUTH_REQUIRED,
+                            sourceName = adapter.sourceName,
+                            errorMessage = result.loginPromptBn,
+                            errorCode = "ERR_AUTH_REQUIRED",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                    Result.success()
+                }
+
+                is SourceDownloadResult.CaptchaOrOtpRequired -> {
+                    tempPartFile.delete()
+                    dao.updateJob(
+                        job.copy(
+                            status = DownloadStatus.AUTH_REQUIRED,
+                            sourceName = adapter.sourceName,
+                            errorMessage = "ক্যাপচা অথবা ওটিপি ভেরিফিকেশন আবশ্যক (CAPTCHA/OTP Required)",
+                            errorCode = "ERR_CAPTCHA_OTP_REQUIRED",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                    Result.success()
+                }
+
+                is SourceDownloadResult.Failure -> {
+                    tempPartFile.delete()
+                    val newRetryCount = job.retryCount + 1
+                    dao.updateJob(
+                        job.copy(
+                            status = DownloadStatus.FAILED,
+                            sourceName = adapter.sourceName,
+                            errorMessage = result.message,
+                            errorCode = result.errorCode,
+                            retryCount = newRetryCount,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                    if (result.canRetry && runAttemptCount < 3) {
+                        Result.retry()
+                    } else {
+                        Result.failure()
+                    }
+                }
+
+                is SourceDownloadResult.Success -> {
+                    // Step 5: Rigorous PDF validation
+                    val validation = PdfValidator.validate(tempPartFile)
+                    when (validation) {
+                        is PdfValidator.ValidationResult.Invalid -> {
+                            tempPartFile.delete()
+                            dao.updateJob(
+                                job.copy(
+                                    status = DownloadStatus.FAILED,
+                                    sourceName = adapter.sourceName,
+                                    errorMessage = validation.reason,
+                                    errorCode = validation.errorCode,
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                            )
+                            Result.failure()
+                        }
+
+                        is PdfValidator.ValidationResult.Valid -> {
+                            // Check for duplicates in database by checksum
+                            val existingDuplicate = dao.findJobByChecksum(validation.checksum)
+                            if (existingDuplicate != null && existingDuplicate.id != job.id) {
+                                tempPartFile.delete()
+                                dao.updateJob(
+                                    job.copy(
+                                        status = DownloadStatus.DUPLICATE,
+                                        sourceName = adapter.sourceName,
+                                        checksum = validation.checksum,
+                                        fileSizeBytes = validation.sizeBytes,
+                                        filePath = existingDuplicate.filePath,
+                                        errorMessage = "একই রেকর্ড পূর্বে সংরক্ষিত রয়েছে (Duplicate checksum detected)",
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                                return Result.success()
+                            }
+
+                            // Store validated file to archive
+                            val safUri = settingsManager.archiveUri.firstOrNull()
+                            val archiveResult = archiveManager.storeValidatedRecord(
+                                job = job,
+                                tempPartFile = tempPartFile,
+                                checksum = validation.checksum,
+                                safTreeUriString = safUri
+                            )
+
+                            val finalStatus = if (archiveResult.isDuplicate) {
+                                DownloadStatus.DUPLICATE
+                            } else if (adapter.isOfficial && !adapter.isTestMock) {
+                                DownloadStatus.VERIFIED
+                            } else {
+                                DownloadStatus.VALIDATED
+                            }
+
+                            dao.updateJob(
+                                job.copy(
+                                    status = finalStatus,
+                                    sourceName = adapter.sourceName,
+                                    sourceReference = result.sourceReference,
+                                    filePath = archiveResult.finalPath,
+                                    archiveUri = archiveResult.archiveUri,
+                                    checksum = validation.checksum,
+                                    fileSizeBytes = validation.sizeBytes,
+                                    errorMessage = null,
+                                    errorCode = null,
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                            )
+                            Result.success()
+                        }
+                    }
                 }
             }
-            is com.example.data.DownloadResult.Failure -> {
-                dao.updateJob(job.copy(
+        } catch (e: Exception) {
+            tempPartFile.delete()
+            dao.updateJob(
+                job.copy(
                     status = DownloadStatus.FAILED,
-                    errorMessage = result.message,
+                    errorMessage = e.localizedMessage ?: "অপ্রত্যাশিত নেটওয়ার্ক ত্রুটি",
+                    errorCode = "ERR_UNEXPECTED_EXCEPTION",
                     updatedAt = System.currentTimeMillis()
-                ))
-                Result.failure()
-            }
-            com.example.data.DownloadResult.AuthRequired -> {
-                dao.updateJob(job.copy(
-                    status = DownloadStatus.AUTH_REQUIRED,
-                    updatedAt = System.currentTimeMillis()
-                ))
-                Result.retry()
-            }
+                )
+            )
+            return Result.failure()
         }
-    }
-
-    private fun validatePdf(file: File): Boolean {
-        if (!file.exists()) return false
-        val bytes = file.readBytes()
-        if (bytes.size < 4) return false
-        // %PDF
-        return bytes[0].toInt() == 0x25 && bytes[1].toInt() == 0x50 && bytes[2].toInt() == 0x44 && bytes[3].toInt() == 0x46
-    }
-
-    private fun calculateChecksum(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val bytes = file.readBytes()
-        val hash = digest.digest(bytes)
-        return hash.joinToString("") { "%02x".format(it) }
     }
 }

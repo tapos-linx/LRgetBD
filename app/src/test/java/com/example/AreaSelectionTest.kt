@@ -1,0 +1,86 @@
+package com.example
+
+import com.example.data.AreaRepository
+import com.example.model.CatalogueSource
+import com.example.model.District
+import com.example.model.Division
+import com.example.model.Upazila
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+class AreaSelectionTest {
+
+    @Before
+    @After
+    fun cleanup() {
+        AreaRepository.clearDynamicMouzas()
+    }
+
+    @Test
+    fun `cascading filters work accurately from Division down to Upazila`() {
+        // Dhaka Division id is 3
+        val dhakaDistricts = AreaRepository.getDistricts(3)
+        assertTrue(dhakaDistricts.isNotEmpty())
+        assertTrue(dhakaDistricts.any { it.name == "Dhaka" })
+        assertTrue(dhakaDistricts.any { it.name == "Gazipur" })
+
+        // District 1 (Dhaka) has Upazilas Dhamrai (1) and Savar (2)
+        val dhakaUpazilas = AreaRepository.getUpazilas(1)
+        assertTrue(dhakaUpazilas.any { it.name == "Dhamrai" })
+        assertTrue(dhakaUpazilas.any { it.name == "Savar" })
+
+        // Upazila 1 (Dhamrai) has verified Mouzas
+        val dhamraiMouzas = AreaRepository.getMouzas(1)
+        assertEquals(10, dhamraiMouzas.size)
+        assertEquals("101", dhamraiMouzas.first().jlNumber)
+    }
+
+    @Test
+    fun `handling zero, one, seven, eight, and 200-plus Mouzas`() {
+        // Zero case: invalid upazila id
+        val zeroMouzas = AreaRepository.getMouzas(9999)
+        assertEquals(0, zeroMouzas.size)
+
+        // 1 Mouza case (custom import)
+        AreaRepository.importFromCsv("single_1,500,SingleMouza,একক মৌজা,99\n")
+        val singleList = AreaRepository.getMouzas(500)
+        assertEquals(1, singleList.size)
+
+        // 7 Mouzas case: Keraniganj has exactly 7 verified Mouzas
+        val keraniganjMouzas = AreaRepository.getMouzas(3)
+        assertEquals(7, keraniganjMouzas.size)
+
+        // 8 Mouzas case: Savar has exactly 8 verified Mouzas
+        val savarMouzas = AreaRepository.getMouzas(2)
+        assertEquals(8, savarMouzas.size)
+
+        // 200+ Mouzas case: bulk import test
+        val bulkCsv = buildString {
+            for (i in 1..250) {
+                append("bulk_$i,600,Mouza_$i,মৌজা_$i,$i\n")
+            }
+        }
+        val importedCount = AreaRepository.importFromCsv(bulkCsv)
+        assertEquals(250, importedCount)
+
+        val largeMouzas = AreaRepository.getMouzas(600)
+        assertEquals(250, largeMouzas.size)
+        assertEquals("1", largeMouzas.first().jlNumber)
+        assertEquals("250", largeMouzas.last().jlNumber)
+    }
+
+    @Test
+    fun `catalogue sources distinguish official vs imported data`() {
+        val officialMouzas = AreaRepository.getMouzas(1)
+        assertTrue(officialMouzas.all { it.catalogueSource == CatalogueSource.OFFICIAL })
+
+        AreaRepository.importFromCsv("custom_1,1,CustomMouza,কাস্টম মৌজা,999\n", CatalogueSource.IMPORTED)
+        val combined = AreaRepository.getMouzas(1)
+        val custom = combined.find { it.id == "custom_1" }
+        assertEquals(CatalogueSource.IMPORTED, custom?.catalogueSource)
+    }
+}

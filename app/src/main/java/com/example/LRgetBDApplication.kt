@@ -14,6 +14,8 @@ class LRgetBDApplication : Application() {
             this,
             AppDatabase::class.java,
             "lrgetbd_database"
-        ).build()
+        )
+            .fallbackToDestructiveMigration()
+            .build()
     }
 }
