@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">LRgetBD</string>
+    <string name="nav_home">মূল পাতা</string>
+    <string name="nav_area_selection">এলাকা নির্বাচন</string>
+    <string name="nav_queue">কার্যসারি</string>
+    <string name="nav_active_jobs">চলমান কাজ</string>
+    <string name="nav_history">সংগ্রহ ইতিহাস</string>
+    <string name="nav_archive">ফাইল ভাণ্ডার</string>
+    <string name="nav_reports">প্রতিবেদন</string>
+    <string name="nav_settings">সেটিংস</string>
+    
+    <string name="label_division">বিভাগ</string>
+    <string name="label_district">জেলা</string>
+    <string name="label_upazila">উপজেলা</string>
+    <string name="label_mouza">মৌজা</string>
+    
+    <string name="action_start_collection">সংগ্রহ শুরু করুন</string>
+    <string name="action_select_all">সবগুলো নির্বাচন করুন</string>
+    <string name="action_deselect_all">সবগুলো বাদ দিন</string>
+    
+    <string name="status_verified">যাচাইকৃত</string>
+    <string name="status_downloading">ডাউনলোড হচ্ছে</string>
+    <string name="status_validated">বৈধ</string>
+    <string name="status_failed">ব্যর্থ</string>
+    
+    <string name="msg_no_archive_folder">কোনো সংগ্রহ ফোল্ডার নির্বাচন করা হয়নি</string>
+    <string name="msg_select_archive_folder">ফোল্ডার নির্বাচন করুন</string>
+</resources>
