@@ -1,31 +1,37 @@
 # LRgetBD — Free-First Native Android Land Record Downloader
 
-[![Build & Release](https://github.com/tapos-linx/LRgetBD/actions/workflows/android.yml/badge.svg)](https://github.com/tapos-linx/LRgetBD/actions)
-[![Download APK](https://img.shields.io/badge/Download_APK-LRgetBD_Latest-brightgreen?style=for-the-badge&logo=android)](https://github.com/tapos-linx/LRgetBD/releases/latest/download/LRgetBD-latest.apk)
-[![GitHub Releases](https://img.shields.io/badge/GitHub-Releases-blue?style=for-the-badge&logo=github)](https://github.com/tapos-linx/LRgetBD/releases)
+[![Download APK Directly](https://img.shields.io/badge/📥_Direct_Download-LRgetBD.apk_(23MB)-brightgreen?style=for-the-badge&logo=android)](https://github.com/tapos-linx/LRgetBD/raw/main/apk/LRgetBD.apk)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-tapos--linx%2FLRgetBD-blue?style=for-the-badge&logo=github)](https://github.com/tapos-linx/LRgetBD)
 
 ---
 
 ## 📲 ১-ক্লিকে ফোনে এপিকে ডাউনলোড ও ইনস্টল (1-Click APK Download)
 
-যেকোনো অ্যান্ড্রয়েড ফোনে সরাসরি অ্যাপটি ডাউনলোড এবং ইনস্টল করতে নিচের বাটনে বা লিঙ্কে ক্লিক করুন:
+আপনার অ্যান্ড্রয়েড ফোনে সরাসরি কোনো ঝামেলা বা ৪০৪ এরর ছাড়াই অ্যাপটি ডাউনলোড করতে নিচের লিঙ্কে ট্যাপ করুন:
 
-### 📥 সরাসরি ডাউনলোড লিংক:
-1. 👉 **[LRgetBD-latest.apk ডাউনলোড করুন (সরাসরি ডাউনলোড)](https://github.com/tapos-linx/LRgetBD/releases/latest/download/LRgetBD-latest.apk)**
-2. 🔄 **[বিকল্প ডাউনলোড লিংক (app-debug.apk)](https://github.com/tapos-linx/LRgetBD/releases/latest/download/app-debug.apk)**
-3. 📦 **[সকল রিলিজ ও সংস্করণ দেখুন (GitHub Releases)](https://github.com/tapos-linx/LRgetBD/releases)**
+### 🟢 ১. সরাসরি ডাইরেক্ট ডাউনলোড লিঙ্ক (১০০% কার্যকর - No 404):
+👉 **[📲 এখানে ক্লিক করে LRgetBD.apk ডাউনলোড করুন (Direct Raw Download)](https://github.com/tapos-linx/LRgetBD/raw/main/apk/LRgetBD.apk)**
+
+> 💡 **নোট:** এই লিঙ্কটি সরাসরি গিটহাব রিপোজিটরি থেকে মূল এপিকে ফাইলটি আপনার ফোনের ডাউনলোড ফোল্ডারে নামিয়ে দেয়। কোনো রিলিজ তৈরির অপেক্ষা করতে হয় না।
+
+### 🌐 ২. গিটহাব ফাইল ভিউয়ার লিঙ্ক (বিকল্প):
+👉 **[গিটহাবে এপিকে ফাইল পেজ ওপেন করুন (View in GitHub & Download)](https://github.com/tapos-linx/LRgetBD/blob/main/apk/LRgetBD.apk)**  
+*(পেজটি ওপেন হলে স্ক্রিনের **"Download"** বাটনে চাপুন)*
+
+### 📦 ৩. গিটহাব রিলিজ পেজ (GitHub Releases):
+👉 **[সকল রিলিজ ও সংস্করণ দেখুন](https://github.com/tapos-linx/LRgetBD/releases)**
 
 ---
 
-### 📱 ফোনে ইনস্টল করার সহজ নিয়ম (Installation Steps):
-1. আপনার ফোনের ব্রাউজার (Chrome, Firefox বা অন্য ব্রাউজার) দিয়ে উপরের **[LRgetBD-latest.apk ডাউনলোড লিংক](https://github.com/tapos-linx/LRgetBD/releases/latest/download/LRgetBD-latest.apk)**-এ ট্যাপ করুন।
-2. ডাউনলোড শেষ হলে নোটিফিকেশন থেকে ফাইলে ক্লিক করুন অথবা ফোনের **Files / Downloads** ফোল্ডারে গিয়ে `LRgetBD-latest.apk` ওপেন করুন।
+### 📱 ফোনে ইনস্টল করার সহজ নিয়ম (Step-by-Step Installation):
+1. উপরের **[ডাইরেক্ট ডাউনলোড লিঙ্ক (LRgetBD.apk)](https://github.com/tapos-linx/LRgetBD/raw/main/apk/LRgetBD.apk)** এ ট্যাপ করুন।
+2. ডাউনলোড শেষ হলে নোটিফিকেশন থেকে ফাইলে ক্লিক করুন অথবা ফোনের **Files / Downloads** ফোল্ডারে গিয়ে `LRgetBD.apk` ওপেন করুন।
 3. যদি অ্যান্ড্রয়েড **"Install unknown apps"** সতর্কবার্তা দেখায়:
    - **Settings** এ ক্লিক করুন।
-   - **"Allow from this source"** অপশনটি অন (Enable) করে দিন।
+   - ব্রাউজারের জন্য **"Allow from this source"** অপশনটি অন (Enable) করে দিন।
 4. **Install** বাটনে চাপুন।
 5. ইনস্টলেশন সম্পন্ন হলে **Open** চাপুন এবং **LRgetBD** ব্যবহার শুরু করুন!
-6. অ্যাপের **সেটিংস (Settings)** এ গিয়ে আপনার পছন্দের সংরক্ষণ ফোল্ডার (Storage Folder) নির্বাচন করে নিন।
+6. অ্যাপের **সেটিংস (Settings)** এ গিয়ে আপনার পছন্দের অফলাইন সংগ্রহ ফোল্ডার (Storage Folder) নির্বাচন করে নিন।
 
 ---
 
@@ -34,11 +40,14 @@
 LRgetBD হলো একটি নেটিভ অ্যান্ড্রয়েড অ্যাপ্লিকেশন (Kotlin, Jetpack Compose, Material 3, Room, WorkManager) যা বাংলাদেশের ভূমি রেকর্ড (খতিয়ান ও মৌজা ম্যাপ) সুসংগঠিতভাবে সংরক্ষণ, ডাউনলোড ও যাচাইকরণের জন্য তৈরি।
 
 - **বাংলা ইন্টারফেস (Bangla-First):** সমস্ত এলাকা নির্বাচন, স্ট্যাটাস ব্যাজ ও নোটিফিকেশন বাংলায়।
+- **০ থেকে ১০০% ডাউনলোড মিটার ও স্ট্যাটাস কার্ড (0-100% Download Meter):**
+  - লাইভ প্রগ্রেস বার এবং রিয়েল-টাইম স্টেজ ট্র্যাকার।
+  - ৪টি স্পষ্ট পর্যায়: **অনুরোধ (Pending) ➔ প্রক্রিয়া (Processing) ➔ ডাউনলোড (Ready to Download) ➔ প্রস্তুত ও সংরক্ষিত (Ready & Saved)**।
+  - ফাইল ওপেন ও শেয়ার করার সরাসরি অপশন।
 - **প্রশাসনিক ক্যাসকেডিং নির্বাচন (Cascading Selection):**
   - বিভাগ → জেলা → উপজেলা → মৌজা ধারাবাহিক ফিল্টারিং।
   - উপজেলা নির্বাচন করলে সংশ্লিষ্ট সমস্ত মৌজা স্বয়ংক্রিয়ভাবে নির্বাচিত হয়।
   - সবগুলো নির্বাচন (Select All) ও বাদ দেওয়ার (Deselect All) সুবিধা।
-  - ০, ১, ৭, ৮ এবং ২০০+ মৌজার জন্য স্কেলেবল আর্কিটেকচার।
 - **জরিপ ও রেকর্ড ধরণ:** সিএস (CS), এসএ (SA), আরএস (RS), বিএস (BS), বিআরএস (BRS) খতিয়ান ও নকশা।
 - **কার্যসারি ব্যবস্থাপনা (Persistent Queue):**
   - ডিফল্ট ব্যাচ সাইজ: **৭টি মৌজা প্রতি ব্যাচে**।
@@ -68,7 +77,7 @@ gradle :app:testDebugUnitTest
 ```bash
 gradle :app:assembleDebug
 ```
-বিল্ড আউটপুট লোকেশন: `app/build/outputs/apk/debug/app-debug.apk`
+বিল্ড আউটপুট লোকেশন: `apk/LRgetBD.apk`
 
 ---
 
