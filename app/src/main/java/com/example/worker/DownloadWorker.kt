@@ -38,7 +38,7 @@ class DownloadWorker(
             return Result.success()
         }
 
-        dao.updateStatus(jobId, DownloadStatus.DOWNLOADING)
+        dao.updateProgress(jobId, DownloadStatus.PROCESSING, 15, "অনুরোধ প্রক্রিয়া শুরু হচ্ছে...")
 
         // Select adapter strictly: Never allow mock to masquerade as official in production
         val adapter = if (isDevTestMode) {
@@ -51,6 +51,7 @@ class DownloadWorker(
         val tempPartFile = File(cacheDir, "job_${jobId}_${System.currentTimeMillis()}.part")
 
         try {
+            dao.updateProgress(jobId, DownloadStatus.DOWNLOADING, 45, "উৎস অনুসন্ধান ও ডাউনলোড চলছে...")
             val result = adapter.downloadRecord(job, tempPartFile)
 
             return when (result) {
@@ -59,6 +60,8 @@ class DownloadWorker(
                     dao.updateJob(
                         job.copy(
                             status = DownloadStatus.SOURCE_UNVERIFIED,
+                            progressPercent = 0,
+                            stageDescription = "অযাচাইকৃত উৎস — ডাউনলোড বন্ধ",
                             sourceName = adapter.sourceName,
                             errorMessage = result.explanationBn,
                             errorCode = "ERR_SOURCE_UNVERIFIED",
@@ -73,6 +76,8 @@ class DownloadWorker(
                     dao.updateJob(
                         job.copy(
                             status = DownloadStatus.ACCESS_RESTRICTED,
+                            progressPercent = 0,
+                            stageDescription = "প্রবেশাধিকার সীমাবদ্ধ",
                             sourceName = adapter.sourceName,
                             errorMessage = result.reasonBn,
                             errorCode = "ERR_ACCESS_RESTRICTED",
@@ -87,6 +92,8 @@ class DownloadWorker(
                     dao.updateJob(
                         job.copy(
                             status = DownloadStatus.AUTH_REQUIRED,
+                            progressPercent = 0,
+                            stageDescription = "লগইন / ওটিপি প্রয়োজন",
                             sourceName = adapter.sourceName,
                             errorMessage = result.loginPromptBn,
                             errorCode = "ERR_AUTH_REQUIRED",
@@ -101,6 +108,8 @@ class DownloadWorker(
                     dao.updateJob(
                         job.copy(
                             status = DownloadStatus.AUTH_REQUIRED,
+                            progressPercent = 0,
+                            stageDescription = "ক্যাপচা / ওটিপি প্রয়োজন",
                             sourceName = adapter.sourceName,
                             errorMessage = "ক্যাপচা অথবা ওটিপি ভেরিফিকেশন আবশ্যক (CAPTCHA/OTP Required)",
                             errorCode = "ERR_CAPTCHA_OTP_REQUIRED",
@@ -116,6 +125,8 @@ class DownloadWorker(
                     dao.updateJob(
                         job.copy(
                             status = DownloadStatus.FAILED,
+                            progressPercent = 0,
+                            stageDescription = "ডাউনলোড ব্যর্থ",
                             sourceName = adapter.sourceName,
                             errorMessage = result.message,
                             errorCode = result.errorCode,
@@ -131,6 +142,7 @@ class DownloadWorker(
                 }
 
                 is SourceDownloadResult.Success -> {
+                    dao.updateProgress(jobId, DownloadStatus.READY_TO_DOWNLOAD, 75, "ডাউনলোড প্রস্তুত, ফাইল যাচাইকরণ চলছে...")
                     // Step 5: Rigorous PDF validation
                     val validation = PdfValidator.validate(tempPartFile)
                     when (validation) {
@@ -139,6 +151,8 @@ class DownloadWorker(
                             dao.updateJob(
                                 job.copy(
                                     status = DownloadStatus.FAILED,
+                                    progressPercent = 0,
+                                    stageDescription = "অবৈধ ফাইল ফরম্যাট",
                                     sourceName = adapter.sourceName,
                                     errorMessage = validation.reason,
                                     errorCode = validation.errorCode,
@@ -149,6 +163,7 @@ class DownloadWorker(
                         }
 
                         is PdfValidator.ValidationResult.Valid -> {
+                            dao.updateProgress(jobId, DownloadStatus.VALIDATING, 90, "ডুপ্লিকেট চেক ও ফাইলে সংরক্ষণ...")
                             // Check for duplicates in database by checksum
                             val existingDuplicate = dao.findJobByChecksum(validation.checksum)
                             if (existingDuplicate != null && existingDuplicate.id != job.id) {
@@ -156,6 +171,8 @@ class DownloadWorker(
                                 dao.updateJob(
                                     job.copy(
                                         status = DownloadStatus.DUPLICATE,
+                                        progressPercent = 100,
+                                        stageDescription = "বিদ্যমান ফাইলের অনুরূপ (১০০%)",
                                         sourceName = adapter.sourceName,
                                         checksum = validation.checksum,
                                         fileSizeBytes = validation.sizeBytes,
@@ -187,6 +204,8 @@ class DownloadWorker(
                             dao.updateJob(
                                 job.copy(
                                     status = finalStatus,
+                                    progressPercent = 100,
+                                    stageDescription = "সংরক্ষণ সম্পন্ন ও প্রস্তুত (১০০%)",
                                     sourceName = adapter.sourceName,
                                     sourceReference = result.sourceReference,
                                     filePath = archiveResult.finalPath,

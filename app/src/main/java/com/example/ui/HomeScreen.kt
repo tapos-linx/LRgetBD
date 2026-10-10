@@ -148,6 +148,28 @@ fun HomeScreen(viewModel: AppViewModel = viewModel()) {
             )
         }
 
+        // Active Request Progress Status Card (0 to 100% Download Meter)
+        val activeJob = jobs.firstOrNull { 
+            it.status == DownloadStatus.DOWNLOADING || 
+            it.status == DownloadStatus.PROCESSING || 
+            it.status == DownloadStatus.READY_TO_DOWNLOAD || 
+            it.status == DownloadStatus.VALIDATING ||
+            it.status == DownloadStatus.PENDING 
+        } ?: lastCompletedJob
+
+        if (activeJob != null) {
+            Text(
+                text = "রেকর্ড অনুরোধের অগ্রগতি (Request Status & Meter)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            LandRecordStatusCard(
+                job = activeJob,
+                onRetry = { viewModel.retryFailedJobs() }
+            )
+        }
+
         // Last activity
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(14.dp)) {

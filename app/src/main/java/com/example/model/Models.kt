@@ -61,7 +61,9 @@ enum class RecordType(val displayName: String, val bnName: String) {
 
 enum class DownloadStatus(val bnTitle: String) {
     PENDING("অপেক্ষমান"),
+    PROCESSING("প্রক্রিয়াধীন"),
     DOWNLOADING("ডাউনলোড হচ্ছে"),
+    READY_TO_DOWNLOAD("ডাউনলোডের জন্য প্রস্তুত"),
     DOWNLOADED_UNVALIDATED("ডাউনলোড সম্পন্ন (অযাচাইকৃত)"),
     VALIDATING("যাচাইকরণ চলছে"),
     VALIDATED("বৈধ ফাইল"),
@@ -103,6 +105,8 @@ data class DownloadJob(
     val sourceName: String = "UNSET",
     val sourceReference: String? = null,
     val status: DownloadStatus = DownloadStatus.PENDING,
+    val progressPercent: Int = 0, // 0 to 100% download meter
+    val stageDescription: String = "", // e.g. "সার্ভার অনুসন্ধান", "ডাউনলোড চলছে (৪৫%)"
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val fileSizeBytes: Long = 0L,

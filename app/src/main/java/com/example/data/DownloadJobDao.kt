@@ -53,6 +53,9 @@ interface DownloadJobDao {
     @Query("UPDATE download_jobs SET status = :status, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateStatus(id: Long, status: DownloadStatus, updatedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE download_jobs SET status = :status, progressPercent = :progressPercent, stageDescription = :stageDescription, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateProgress(id: Long, status: DownloadStatus, progressPercent: Int, stageDescription: String, updatedAt: Long = System.currentTimeMillis())
+
     @Query("UPDATE download_jobs SET status = 'PAUSED', updatedAt = :now WHERE status IN ('PENDING', 'DOWNLOADING')")
     suspend fun pauseActiveJobs(now: Long = System.currentTimeMillis()): Int
 
