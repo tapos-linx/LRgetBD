@@ -236,45 +236,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val batchId = UUID.randomUUID().toString().take(8)
-            val jobsToInsert = mutableListOf<DownloadJob>()
-
-            mouzaIds.forEach { mouzaId ->
-                val mouza = allAvailableMouzas[mouzaId] ?: return@forEach
-                docTypeIds.forEach { docTypeId ->
-                    val docType = docTypeMap[docTypeId] ?: return@forEach
-                    jobsToInsert.add(
-                        DownloadJob(
-                            divisionId = division?.id ?: 0,
-                            divisionName = division?.bnName ?: "",
-                            districtId = district?.id ?: 0,
-                            districtName = district?.bnName ?: "",
-                            upazilaId = upazila.id,
-                            upazilaName = upazila.bnName,
-                            mouzaId = mouza.id,
-                            mouzaName = mouza.bnName,
-                            jlNumber = mouza.jlNumber,
-                            surveyType = docType.surveyType,
-                            recordType = docType.recordType,
-                            recordIdentifier = "ALL",
-                            sourceName = if (testMode) "TEST_FIXTURE_DEV" else "EPORCHA_BD",
-                            status = DownloadStatus.PENDING,
-                            batchId = batchId
-                        )
-                    )
-                }
-            }
-
-            val insertedIds = dao.insertJobs(jobsToInsert)
-
-            // Enqueue WorkManager with conservative concurrency constraints
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
-
-            // Process sequentially in batches of batchSize (default 7)
             val batchChunkSize = _batchSize.value
-            insertedIds.chunked(batchChunkSize).forEachIndexed { _, chunkIds ->
-                chunkIds.forEach { id ->
+            
+            // Process Mouzas in chunks of batchSize (default 7)
+            mouzaIds.toList().chunked(batchChunkSize).forEach { mouzaChunk ->
+                val jobsToInsert = mutableListOf<DownloadJob>()
+                mouzaChunk.forEach { mouzaId ->
+                    val mouza = allAvailableMouzas[mouzaId] ?: return@forEach
+                    docTypeIds.forEach { docTypeId ->
+                        val docType = docTypeMap[docTypeId] ?: return@forEach
+                        jobsToInsert.add(
+                            DownloadJob(
+                                divisionId = division?.id ?: 0,
+                                divisionName = division?.bnName ?: "",
+                                districtId = district?.id ?: 0,
+                                districtName = district?.bnName ?: "",
+                                upazilaId = upazila.id,
+                                upazilaName = upazila.bnName,
+                                mouzaId = mouza.id,
+                                mouzaName = mouza.bnName,
+                                jlNumber = mouza.jlNumber,
+                                surveyType = docType.surveyType,
+                                recordType = docType.recordType,
+                                recordIdentifier = "ALL",
+                                sourceName = if (testMode) "TEST_FIXTURE_DEV" else "EPORCHA_BD",
+                                status = DownloadStatus.PENDING,
+                                batchId = batchId
+                            )
+                        )
+                    }
+                }
+
+                val insertedIds = dao.insertJobs(jobsToInsert)
+
+                // Enqueue WorkManager with conservative concurrency constraints
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+
+                insertedIds.forEach { id ->
                     val request = OneTimeWorkRequestBuilder<DownloadWorker>()
                         .setConstraints(constraints)
                         .setInputData(
@@ -291,7 +291,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            _uiMessage.value = "${mouzaIds.size} টি মৌজার জন্য মোট ${jobsToInsert.size} টি রেকর্ডের সংগ্রহ কার্যসারি শুরু হয়েছে।"
+            _uiMessage.value = "${mouzaIds.size} টি মৌজার জন্য রেকর্ডের সংগ্রহ কার্যসারি শুরু হয়েছে (প্রতি ব্যাচে $batchChunkSize টি মৌজা)।"
         }
     }
 
@@ -430,11 +430,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val result = archiveManager.exportMasterFolderDirectlyToPhoneStorage(targetUpazila)
                 val zipFile = result.zipFile
 
-                _uiMessage.value = "ফোন স্টোরেজে সংরক্ষিত: Downloads > LRgetBD_Records > ${zipFile.name} (${zipFile.length() / 1024} KB)"
+                _uiMessage.value = "ফোন স্টোরেজে সংরক্ষিত: Downloads > LRgetBD > ${zipFile.name} (${zipFile.length() / 1024} KB)"
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         context,
-                        "ফোন স্টোরেজে সেভ হয়েছে:\nDownloads > LRgetBD_Records > ${zipFile.name}",
+                        "ফোন স্টোরেজে সেভ হয়েছে:\nDownloads > LRgetBD > ${zipFile.name}",
                         Toast.LENGTH_LONG
                     ).show()
 
@@ -449,7 +449,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             type = "application/zip"
                             putExtra(Intent.EXTRA_STREAM, uri)
                             putExtra(Intent.EXTRA_SUBJECT, "LRgetBD Master Folder - ${zipFile.name}")
-                            putExtra(Intent.EXTRA_TEXT, "LRgetBD Master Folder: Phone Storage/Download/LRgetBD_Records/${zipFile.name}")
+                            putExtra(Intent.EXTRA_TEXT, "LRgetBD Master Folder: Phone Storage/Download/LRgetBD/${zipFile.name}")
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         context.startActivity(Intent.createChooser(intent, "মাস্টার ফোল্ডার ডাউনলোড / সেভ করুন"))

@@ -38,15 +38,16 @@ class ArchiveFileManager(private val context: Context) {
         checksum: String,
         safTreeUriString: String?
     ): ArchiveResult {
+        val districtSafe = sanitizeFileName(if (job.districtName.isNotBlank()) job.districtName else "District_${job.districtId}")
         val upazilaSafe = sanitizeFileName(if (job.upazilaName.isNotBlank()) job.upazilaName else "Upazila_${job.upazilaId}")
         val mouzaSafe = sanitizeFileName(if (job.mouzaName.isNotBlank()) job.mouzaName else "Mouza_${job.mouzaId}")
         val jlSafe = sanitizeFileName(if (job.jlNumber.isNotBlank()) job.jlNumber else "0")
         val surveySafe = sanitizeFileName(job.surveyType.name)
         val recordTypeSafe = sanitizeFileName(job.recordType.name)
 
-        val masterFolderName = "LR_BD_Records_$upazilaSafe"
-        val mouzaFolderName = "Mouza_${jlSafe}_$mouzaSafe"
-        val relativeSubPath = "$masterFolderName/$mouzaFolderName"
+        val masterFolderName = "LR_BD_${districtSafe}_$upazilaSafe"
+        val mouzaFolderName = "${mouzaSafe}_JL_$jlSafe"
+        val relativeSubPath = "$masterFolderName/$mouzaFolderName/$recordTypeSafe"
         val baseFileName = "${recordTypeSafe}_${surveySafe}_${job.recordIdentifier}_${checksum.take(8)}"
         val targetFileName = "$baseFileName.pdf"
 
@@ -57,8 +58,8 @@ class ArchiveFileManager(private val context: Context) {
                 val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
                 if (rootDoc != null && rootDoc.canWrite()) {
                     var currentDir: DocumentFile = rootDoc
-                    // Navigate/create Master Folder and Mouza subfolder
-                    for (segment in listOf(masterFolderName, mouzaFolderName)) {
+                    // Navigate/create Master Folder, Mouza subfolder and RecordType folder
+                    for (segment in listOf(masterFolderName, mouzaFolderName, recordTypeSafe)) {
                         val subDir = currentDir.findFile(segment)
                         val nextDir = if (subDir == null || !subDir.isDirectory) {
                             currentDir.createDirectory(segment) ?: currentDir
@@ -168,10 +169,14 @@ class ArchiveFileManager(private val context: Context) {
             manifestArray.put(entry)
             manifestFile.writeText(manifestArray.toString(2))
 
-            // Also maintain Upazila Master Index in parent folder (LR_BD_Records_[Upazila])
-            val parentDir = dir.parentFile
-            if (parentDir != null && parentDir.name.startsWith("LR_BD_Records_")) {
-                val masterIndexFile = File(parentDir, "master_upazila_index.json")
+            // Also maintain Upazila Master Index in parent folder (LR_BD_[District]_[Upazila])
+            var masterDirCandidate = dir
+            while (masterDirCandidate.parentFile != null && !masterDirCandidate.name.startsWith("LR_BD_")) {
+                masterDirCandidate = masterDirCandidate.parentFile!!
+            }
+            
+            if (masterDirCandidate.name.startsWith("LR_BD_")) {
+                val masterIndexFile = File(masterDirCandidate, "master_upazila_index.json")
                 val masterArray = if (masterIndexFile.exists()) {
                     try { JSONArray(masterIndexFile.readText()) } catch (e: Exception) { JSONArray() }
                 } else {
@@ -278,7 +283,7 @@ class ArchiveFileManager(private val context: Context) {
 
     fun listMasterFolderNames(): List<String> {
         val baseDir = getBaseStorageDir()
-        return baseDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("LR_BD_Records_") }?.map { it.name } ?: emptyList()
+        return baseDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("LR_BD_") }?.map { it.name } ?: emptyList()
     }
 
     /**
@@ -292,11 +297,11 @@ class ArchiveFileManager(private val context: Context) {
 
         val safeUpazila = if (!upazilaName.isNullOrBlank()) sanitizeFileName(upazilaName) else "All_Upazilas"
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val zipFile = File(exportDir, "LR_BD_Records_${safeUpazila}_$timestamp.zip")
+        val zipFile = File(exportDir, "LR_BD_${safeUpazila}_$timestamp.zip")
 
         val targetDir = if (!upazilaName.isNullOrBlank()) {
-            val candidate = File(baseDir, "LR_BD_Records_$safeUpazila")
-            if (candidate.exists()) candidate else baseDir
+            val candidate = baseDir.listFiles()?.find { it.isDirectory && it.name.contains(safeUpazila) && it.name.startsWith("LR_BD_") }
+            candidate ?: baseDir
         } else {
             baseDir
         }
@@ -329,7 +334,7 @@ class ArchiveFileManager(private val context: Context) {
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, zipFile.name)
                     put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/LRgetBD_Records")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/LRgetBD")
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
                 val resolver = context.contentResolver
@@ -346,7 +351,7 @@ class ArchiveFileManager(private val context: Context) {
                 }
             } else {
                 val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                val targetDir = File(publicDownloads, "LRgetBD_Records")
+                val targetDir = File(publicDownloads, "LRgetBD")
                 if (!targetDir.exists()) targetDir.mkdirs()
                 val targetFile = File(targetDir, zipFile.name)
                 FileInputStream(zipFile).use { input ->
@@ -377,13 +382,15 @@ class ArchiveFileManager(private val context: Context) {
         val zipUri = saveZipToPhoneStorage(zipFile)
         val baseDir = getBaseStorageDir()
         val safeUpazila = if (!upazilaName.isNullOrBlank()) sanitizeFileName(upazilaName) else "All_Upazilas"
+        
         val targetDir = if (!upazilaName.isNullOrBlank()) {
-            val candidate = File(baseDir, "LR_BD_Records_$safeUpazila")
-            if (candidate.exists()) candidate else baseDir
+            val candidate = baseDir.listFiles()?.find { it.isDirectory && it.name.contains(safeUpazila) && it.name.startsWith("LR_BD_") }
+            candidate ?: baseDir
         } else {
             baseDir
         }
 
+        val masterFolderName = targetDir.name
         var exportedCount = 0
         val allPdfs = targetDir.walkTopDown().filter { it.isFile && it.extension.lowercase() == "pdf" }.toList()
 
@@ -391,9 +398,9 @@ class ArchiveFileManager(private val context: Context) {
             try {
                 val relativePathFromTarget = targetDir.toURI().relativize(pdf.parentFile.toURI()).path.trim('/')
                 val destinationSubFolder = if (relativePathFromTarget.isNotBlank()) {
-                    Environment.DIRECTORY_DOWNLOADS + "/LRgetBD_Records/LR_BD_Records_$safeUpazila/$relativePathFromTarget"
+                    Environment.DIRECTORY_DOWNLOADS + "/LRgetBD/$masterFolderName/$relativePathFromTarget"
                 } else {
-                    Environment.DIRECTORY_DOWNLOADS + "/LRgetBD_Records/LR_BD_Records_$safeUpazila"
+                    Environment.DIRECTORY_DOWNLOADS + "/LRgetBD/$masterFolderName"
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -415,7 +422,7 @@ class ArchiveFileManager(private val context: Context) {
                     }
                 } else {
                     val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    val outDir = File(publicDownloads, "LRgetBD_Records/LR_BD_Records_$safeUpazila/$relativePathFromTarget")
+                    val outDir = File(publicDownloads, "LRgetBD/$masterFolderName/$relativePathFromTarget")
                     if (!outDir.exists()) outDir.mkdirs()
                     val outFile = File(outDir, pdf.name)
                     FileInputStream(pdf).use { input ->
@@ -427,7 +434,7 @@ class ArchiveFileManager(private val context: Context) {
             } catch (_: Exception) {}
         }
 
-        val pathDesc = "Phone Storage > Downloads > LRgetBD_Records"
+        val pathDesc = "Phone Storage > Downloads > LRgetBD"
         return PhoneStorageExportResult(
             exportedFilesCount = exportedCount,
             storagePathDescription = pathDesc,
