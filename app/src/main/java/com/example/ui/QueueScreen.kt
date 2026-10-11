@@ -13,9 +13,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -48,7 +50,9 @@ import com.example.model.DownloadStatus
 
 @Composable
 fun QueueScreen(viewModel: AppViewModel = viewModel()) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val jobs by viewModel.allJobs.collectAsState()
+    val isExporting by viewModel.isExportingMasterZip.collectAsState()
     val uiMessage by viewModel.uiMessage.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -146,6 +150,25 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Button(
+                    onClick = { viewModel.exportAndDownloadMasterFolder(context) },
+                    modifier = Modifier.fillMaxWidth().testTag("queue_download_master_folder_button"),
+                    enabled = !isExporting
+                ) {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                    Text(
+                        text = "মাস্টার ফোল্ডার ডাউনলোড (Download Master Folder ZIP)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

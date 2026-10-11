@@ -1,7 +1,12 @@
 package com.example.util
 
+import android.content.ContentValues
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
 import com.example.model.DownloadJob
 import java.io.File
@@ -267,7 +272,188 @@ class ArchiveFileManager(private val context: Context) {
         return array.toString(2)
     }
 
-    private fun sanitizeFileName(name: String): String {
+    fun getBaseStorageDir(): File {
+        return context.getExternalFilesDir(null) ?: context.filesDir
+    }
+
+    fun listMasterFolderNames(): List<String> {
+        val baseDir = getBaseStorageDir()
+        return baseDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("LR_BD_Records_") }?.map { it.name } ?: emptyList()
+    }
+
+    /**
+     * Creates a ZIP archive containing the Master Folder with all its Mouza subfolders and records.
+     * Copies the resulting ZIP into public Downloads if available, and returns the file.
+     */
+    fun createMasterZip(upazilaName: String? = null): File {
+        val baseDir = getBaseStorageDir()
+        val exportDir = File(context.cacheDir, "exports")
+        if (!exportDir.exists()) exportDir.mkdirs()
+
+        val safeUpazila = if (!upazilaName.isNullOrBlank()) sanitizeFileName(upazilaName) else "All_Upazilas"
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val zipFile = File(exportDir, "LR_BD_Records_${safeUpazila}_$timestamp.zip")
+
+        val targetDir = if (!upazilaName.isNullOrBlank()) {
+            val candidate = File(baseDir, "LR_BD_Records_$safeUpazila")
+            if (candidate.exists()) candidate else baseDir
+        } else {
+            baseDir
+        }
+
+        // Ensure master index file exists in directory
+        val indexFile = File(targetDir, "master_upazila_index.json")
+        if (!indexFile.exists()) {
+            indexFile.writeText("{\n  \"export\": \"LRgetBD\",\n  \"upazila\": \"${upazilaName ?: "All"}\",\n  \"generatedAt\": \"${Date()}\"\n}")
+        }
+
+        java.util.zip.ZipOutputStream(FileOutputStream(zipFile)).use { zipOut ->
+            zipFolderRecursively(targetDir, targetDir, zipOut)
+        }
+
+        // Best effort: Copy to public Downloads folder on device
+        try {
+            saveZipToPhoneStorage(zipFile)
+        } catch (_: Exception) {}
+
+        return zipFile
+    }
+
+    /**
+     * Saves the ZIP file directly into the phone's public Downloads directory (Phone Storage > Downloads > LRgetBD_Records)
+     * using MediaStore.Downloads (Android 10+) or Environment.getExternalStoragePublicDirectory (Android 9 and below).
+     */
+    fun saveZipToPhoneStorage(zipFile: File): Uri? {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, zipFile.name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/LRgetBD_Records")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val resolver = context.contentResolver
+                val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val uri = resolver.insert(collection, values)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { out ->
+                        FileInputStream(zipFile).use { input -> input.copyTo(out) }
+                    }
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                    return uri
+                }
+            } else {
+                val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val targetDir = File(publicDownloads, "LRgetBD_Records")
+                if (!targetDir.exists()) targetDir.mkdirs()
+                val targetFile = File(targetDir, zipFile.name)
+                FileInputStream(zipFile).use { input ->
+                    FileOutputStream(targetFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                MediaScannerConnection.scanFile(context, arrayOf(targetFile.absolutePath), arrayOf("application/zip"), null)
+                return Uri.fromFile(targetFile)
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
+    data class PhoneStorageExportResult(
+        val exportedFilesCount: Int,
+        val storagePathDescription: String,
+        val zipUri: Uri?,
+        val zipFile: File
+    )
+
+    /**
+     * Exports the master folder with all its individual PDF files and structure
+     * straight into the phone's public Downloads directory under Downloads/LRgetBD_Records/LR_BD_Records_[Upazila]
+     */
+    fun exportMasterFolderDirectlyToPhoneStorage(upazilaName: String? = null): PhoneStorageExportResult {
+        val zipFile = createMasterZip(upazilaName)
+        val zipUri = saveZipToPhoneStorage(zipFile)
+        val baseDir = getBaseStorageDir()
+        val safeUpazila = if (!upazilaName.isNullOrBlank()) sanitizeFileName(upazilaName) else "All_Upazilas"
+        val targetDir = if (!upazilaName.isNullOrBlank()) {
+            val candidate = File(baseDir, "LR_BD_Records_$safeUpazila")
+            if (candidate.exists()) candidate else baseDir
+        } else {
+            baseDir
+        }
+
+        var exportedCount = 0
+        val allPdfs = targetDir.walkTopDown().filter { it.isFile && it.extension.lowercase() == "pdf" }.toList()
+
+        for (pdf in allPdfs) {
+            try {
+                val relativePathFromTarget = targetDir.toURI().relativize(pdf.parentFile.toURI()).path.trim('/')
+                val destinationSubFolder = if (relativePathFromTarget.isNotBlank()) {
+                    Environment.DIRECTORY_DOWNLOADS + "/LRgetBD_Records/LR_BD_Records_$safeUpazila/$relativePathFromTarget"
+                } else {
+                    Environment.DIRECTORY_DOWNLOADS + "/LRgetBD_Records/LR_BD_Records_$safeUpazila"
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, pdf.name)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, destinationSubFolder)
+                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+                    val uri = context.contentResolver.insert(MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+                    if (uri != null) {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            FileInputStream(pdf).use { input -> input.copyTo(out) }
+                        }
+                        values.clear()
+                        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                        context.contentResolver.update(uri, values, null, null)
+                        exportedCount++
+                    }
+                } else {
+                    val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    val outDir = File(publicDownloads, "LRgetBD_Records/LR_BD_Records_$safeUpazila/$relativePathFromTarget")
+                    if (!outDir.exists()) outDir.mkdirs()
+                    val outFile = File(outDir, pdf.name)
+                    FileInputStream(pdf).use { input ->
+                        FileOutputStream(outFile).use { output -> input.copyTo(output) }
+                    }
+                    MediaScannerConnection.scanFile(context, arrayOf(outFile.absolutePath), arrayOf("application/pdf"), null)
+                    exportedCount++
+                }
+            } catch (_: Exception) {}
+        }
+
+        val pathDesc = "Phone Storage > Downloads > LRgetBD_Records"
+        return PhoneStorageExportResult(
+            exportedFilesCount = exportedCount,
+            storagePathDescription = pathDesc,
+            zipUri = zipUri,
+            zipFile = zipFile
+        )
+    }
+
+    private fun zipFolderRecursively(rootDir: File, currentFile: File, zipOut: java.util.zip.ZipOutputStream) {
+        val files = currentFile.listFiles() ?: return
+        for (file in files) {
+            if (file.isDirectory) {
+                zipFolderRecursively(rootDir, file, zipOut)
+            } else if (!file.name.endsWith(".zip") && !file.name.endsWith(".part")) {
+                val relativePath = rootDir.toURI().relativize(file.toURI()).path
+                val entry = java.util.zip.ZipEntry(relativePath)
+                zipOut.putNextEntry(entry)
+                FileInputStream(file).use { input ->
+                    input.copyTo(zipOut)
+                }
+                zipOut.closeEntry()
+            }
+        }
+    }
+
+    fun sanitizeFileName(name: String): String {
         return name.replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_")
             .trim('_')
             .ifEmpty { "Record" }

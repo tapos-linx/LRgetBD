@@ -21,8 +21,15 @@ import com.example.model.RecordType
 import com.example.model.SurveyType
 import com.example.model.Upazila
 import com.example.worker.DownloadWorker
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import com.example.util.ArchiveFileManager
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +37,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val database = (application as LRgetBDApplication).database
@@ -80,6 +88,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // Notification / UI alert message
     private val _uiMessage = MutableStateFlow<String?>(null)
     val uiMessage = _uiMessage.asStateFlow()
+
+    // Master folder ZIP export state
+    private val _isExportingMasterZip = MutableStateFlow(false)
+    val isExportingMasterZip = _isExportingMasterZip.asStateFlow()
 
     fun clearUiMessage() {
         _uiMessage.value = null
@@ -397,6 +409,87 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     workManager.enqueue(request)
                 }
                 _uiMessage.value = "$count টি লগইন-প্রয়োজনীয় কাজ পুনরায় শুরু করা হয়েছে।"
+            }
+        }
+    }
+
+    /**
+     * Packages and saves the Master Folder straight to Phone Storage (Downloads/LRgetBD_Records),
+     * and triggers system save / share sheet.
+     */
+    fun exportAndDownloadMasterFolder(
+        context: Context,
+        upazilaName: String? = null,
+        onSuccess: ((File) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isExportingMasterZip.value = true
+            try {
+                val archiveManager = ArchiveFileManager(context)
+                val targetUpazila = upazilaName ?: _selectedUpazila.value?.bnName ?: _selectedUpazila.value?.name
+                val result = archiveManager.exportMasterFolderDirectlyToPhoneStorage(targetUpazila)
+                val zipFile = result.zipFile
+
+                _uiMessage.value = "ফোন স্টোরেজে সংরক্ষিত: Downloads > LRgetBD_Records > ${zipFile.name} (${zipFile.length() / 1024} KB)"
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        "ফোন স্টোরেজে সেভ হয়েছে:\nDownloads > LRgetBD_Records > ${zipFile.name}",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    onSuccess?.invoke(zipFile)
+                    try {
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            zipFile
+                        )
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/zip"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            putExtra(Intent.EXTRA_SUBJECT, "LRgetBD Master Folder - ${zipFile.name}")
+                            putExtra(Intent.EXTRA_TEXT, "LRgetBD Master Folder: Phone Storage/Download/LRgetBD_Records/${zipFile.name}")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "মাস্টার ফোল্ডার ডাউনলোড / সেভ করুন"))
+                    } catch (_: Exception) {}
+                }
+            } catch (e: Exception) {
+                _uiMessage.value = "মাস্টার ফোল্ডার সংরক্ষণে ত্রুটি: ${e.localizedMessage}"
+            } finally {
+                _isExportingMasterZip.value = false
+            }
+        }
+    }
+
+    /**
+     * Saves the master folder and all mouza records straight to phone storage without opening share sheet.
+     */
+    fun saveMasterFolderStraightToPhoneStorage(
+        context: Context,
+        upazilaName: String? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isExportingMasterZip.value = true
+            try {
+                val archiveManager = ArchiveFileManager(context)
+                val targetUpazila = upazilaName ?: _selectedUpazila.value?.bnName ?: _selectedUpazila.value?.name
+                val result = archiveManager.exportMasterFolderDirectlyToPhoneStorage(targetUpazila)
+                val zipFile = result.zipFile
+
+                _uiMessage.value = "সরাসরি ফোন মেমোরিতে সেভ হয়েছে: ${result.storagePathDescription} (${zipFile.name})"
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        "ফোন স্টোরেজে সংরক্ষিত হয়েছে:\n${result.storagePathDescription}/${zipFile.name}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } catch (e: Exception) {
+                _uiMessage.value = "ফোন স্টোরেজে সেভ করতে সমস্যা: ${e.localizedMessage}"
+            } finally {
+                _isExportingMasterZip.value = false
             }
         }
     }

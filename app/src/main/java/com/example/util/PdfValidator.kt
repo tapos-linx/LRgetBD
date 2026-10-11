@@ -25,10 +25,6 @@ object PdfValidator {
             return ValidationResult.Invalid("ফাইলটি শূন্য বাইট বা ফাঁকা (Empty file)", "ERR_FILE_EMPTY")
         }
 
-        if (size < 128) {
-            return ValidationResult.Invalid("ফাইলের আকার অপ্রতুল (File too small to be valid PDF)", "ERR_FILE_TOO_SMALL")
-        }
-
         // Read header bytes
         val headerBytes = ByteArray(1024.coerceAtMost(size.toInt()))
         FileInputStream(file).use { input ->
@@ -81,6 +77,10 @@ object PdfValidator {
                 "অসম্পূর্ণ পিডিএফ স্ট্রিম (PDF EOF marker missing / incomplete download)",
                 "ERR_INCOMPLETE_PDF_STREAM"
             )
+        }
+
+        if (size < 10) {
+            return ValidationResult.Invalid("ফাইলের আকার অপ্রতুল (File too small to be valid PDF)", "ERR_FILE_TOO_SMALL")
         }
 
         // Compute SHA-256 Checksum

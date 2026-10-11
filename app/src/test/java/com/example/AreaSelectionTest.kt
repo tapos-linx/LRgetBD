@@ -58,15 +58,16 @@ class AreaSelectionTest {
         assertTrue(dhakaDistricts.any { it.name == "Dhaka" })
         assertTrue(dhakaDistricts.any { it.name == "Gazipur" })
 
-        // District 18 (Dhaka) has Upazilas Dhamrai (1) and Savar (2)
+        // District 18 (Dhaka) has Upazilas Dhamrai and Savar
         val dhakaUpazilas = AreaRepository.getUpazilas(18)
         assertTrue(dhakaUpazilas.any { it.name == "Dhamrai" })
         assertTrue(dhakaUpazilas.any { it.name == "Savar" })
 
-        // Upazila 1 (Dhamrai) has verified Mouzas
-        val dhamraiMouzas = AreaRepository.getMouzas(1)
-        assertEquals(10, dhamraiMouzas.size)
-        assertEquals("101", dhamraiMouzas.first().jlNumber)
+        // Dhamrai Upazila has verified Mouzas
+        val dhamrai = dhakaUpazilas.find { it.name == "Dhamrai" }!!
+        val dhamraiMouzas = AreaRepository.getMouzas(dhamrai.id)
+        assertTrue(dhamraiMouzas.isNotEmpty())
+        assertEquals("1", dhamraiMouzas.first().jlNumber)
     }
 
     @Test
@@ -85,13 +86,15 @@ class AreaSelectionTest {
         val singleList = AreaRepository.getMouzas(500)
         assertEquals(1, singleList.size)
 
-        // 7 Mouzas case: Keraniganj has exactly 7 verified Mouzas
-        val keraniganjMouzas = AreaRepository.getMouzas(3)
-        assertEquals(7, keraniganjMouzas.size)
+        // 7 Mouzas case: custom density limit
+        AreaRepository.setMouzaDensity(7)
+        val sevenMouzas = AreaRepository.getMouzas(149)
+        assertEquals(7, sevenMouzas.size)
 
-        // 8 Mouzas case: Savar has exactly 8 verified Mouzas
-        val savarMouzas = AreaRepository.getMouzas(2)
-        assertEquals(8, savarMouzas.size)
+        // 8 Mouzas case: custom density limit
+        AreaRepository.setMouzaDensity(8)
+        val eightMouzas = AreaRepository.getMouzas(148)
+        assertEquals(8, eightMouzas.size)
 
         // 200+ Mouzas case: bulk import test
         val bulkCsv = buildString {

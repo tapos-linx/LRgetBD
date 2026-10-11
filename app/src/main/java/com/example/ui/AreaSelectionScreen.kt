@@ -9,14 +9,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,9 +57,20 @@ import com.example.data.AreaRepository
 import com.example.model.CatalogueSource
 import com.example.model.DocumentTypeItem
 
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AreaSelectionScreen(viewModel: AppViewModel = viewModel()) {
+fun AreaSelectionScreen(
+    viewModel: AppViewModel = viewModel(),
+    onNavigateToQueue: () -> Unit = {}
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val selectedDivision by viewModel.selectedDivision.collectAsState()
     val selectedDistrict by viewModel.selectedDistrict.collectAsState()
     val selectedUpazila by viewModel.selectedUpazila.collectAsState()
@@ -63,6 +80,24 @@ fun AreaSelectionScreen(viewModel: AppViewModel = viewModel()) {
     val isDevTestMode by viewModel.isDevTestMode.collectAsState()
     val batchSize by viewModel.batchSize.collectAsState()
     val mouzaDensity by viewModel.mouzaDensity.collectAsState()
+    val isExporting by viewModel.isExportingMasterZip.collectAsState()
+    val uiMessage by viewModel.uiMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiMessage) {
+        uiMessage?.let { msg ->
+            val result = snackbarHostState.showSnackbar(
+                message = msg,
+                actionLabel = "কার্যসারি দেখুন",
+                duration = androidx.compose.material3.SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                onNavigateToQueue()
+            }
+            viewModel.clearUiMessage()
+        }
+    }
 
     val divisions = AreaRepository.divisions
     val districts = selectedDivision?.let { AreaRepository.getDistricts(it.id) } ?: emptyList()
@@ -140,6 +175,54 @@ fun AreaSelectionScreen(viewModel: AppViewModel = viewModel()) {
                 viewModel.selectUpazila(upazilas.find { it.bnName == name })
             }
         )
+
+        // Instant Master Folder Download Card for Selected Upazila
+        if (selectedUpazila != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("upazila_master_folder_card"),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${selectedUpazila!!.bnName} উপজেলার মাস্টার ফোল্ডার",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "সকল মৌজা ও খতিয়ান সহ সরাসরি সম্পূর্ণ মাস্টার ফোল্ডার ডাউনলোড করুন।",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                    Button(
+                        onClick = { viewModel.exportAndDownloadMasterFolder(context, selectedUpazila!!.bnName) },
+                        modifier = Modifier.testTag("upazila_quick_download_button"),
+                        enabled = !isExporting
+                    ) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = "Download Master Folder",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("ডাউনলোড", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
 
         // Document Types Granular Selection Controls ("Select All" / "Deselect All")
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -232,7 +315,7 @@ fun AreaSelectionScreen(viewModel: AppViewModel = viewModel()) {
             }
         }
 
-        // Mouza Directory Density Selection Chips (50, 100, 200 Mouzas)
+        // Mouza Directory Density Selection Chips (50, 100, 150, 200, 250 Mouzas)
         if (selectedUpazila != null) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -244,7 +327,7 @@ fun AreaSelectionScreen(viewModel: AppViewModel = viewModel()) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                listOf(50, 100, 200).forEach { count ->
+                listOf(50, 100, 150, 200, 250).forEach { count ->
                     FilterChip(
                         selected = mouzaDensity == count,
                         onClick = { viewModel.setMouzaDensity(count) },
@@ -343,7 +426,52 @@ fun AreaSelectionScreen(viewModel: AppViewModel = viewModel()) {
                     fontWeight = FontWeight.Bold
                 )
             }
+
+            // Master Folder ZIP Download Button
+            Button(
+                onClick = { viewModel.exportAndDownloadMasterFolder(context, selectedUpazila?.bnName) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("download_master_zip_button"),
+                enabled = !isExporting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = "Download Master Folder ZIP",
+                    modifier = Modifier.size(20.dp).padding(end = 6.dp)
+                )
+                Text(
+                    text = "মাস্টার ফোল্ডার ডাউনলোড করুন (Download Master Folder ZIP)",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Save Straight to Phone Storage
+            FilledTonalButton(
+                onClick = { viewModel.saveMasterFolderStraightToPhoneStorage(context, selectedUpazila?.bnName) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("save_straight_to_phone_storage_button"),
+                enabled = !isExporting
+            ) {
+                Icon(
+                    Icons.Default.FolderZip,
+                    contentDescription = "Save to Phone Storage",
+                    modifier = Modifier.size(18.dp).padding(end = 6.dp)
+                )
+                Text(
+                    text = "সরাসরি ফোন মেমোরিতে সেভ করুন (Save Straight to Phone Storage)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
+
+        SnackbarHost(hostState = snackbarHostState)
     }
 }
 

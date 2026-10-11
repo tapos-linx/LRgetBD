@@ -10,8 +10,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -34,8 +37,10 @@ import java.util.Locale
 
 @Composable
 fun HomeScreen(viewModel: AppViewModel = viewModel()) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val jobs by viewModel.allJobs.collectAsState()
     val isDevTestMode by viewModel.isDevTestMode.collectAsState()
+    val isExporting by viewModel.isExportingMasterZip.collectAsState()
 
     val total = jobs.size
     val validated = jobs.count { it.status == DownloadStatus.VALIDATED || it.status == DownloadStatus.VERIFIED }
@@ -91,6 +96,63 @@ fun HomeScreen(viewModel: AppViewModel = viewModel()) {
                     modifier = Modifier.padding(top = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        // Master Folder Download Action Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "মাস্টার ফোল্ডার ডাউনলোড",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "সকল মৌজা ও খতিয়ান সরাসরি ফোন মেমোরিতে (Downloads) সংরক্ষণ করুন।",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                    Button(
+                        onClick = { viewModel.exportAndDownloadMasterFolder(context) },
+                        enabled = !isExporting,
+                        modifier = Modifier.testTag("home_download_master_folder_button")
+                    ) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                        Text("ডাউনলোড", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 8.dp))
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { viewModel.saveMasterFolderStraightToPhoneStorage(context) },
+                    enabled = !isExporting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_save_straight_to_phone_button")
+                ) {
+                    Icon(
+                        Icons.Default.FolderZip,
+                        contentDescription = "Save Straight to Phone Storage",
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                    Text("সরাসরি ফোন মেমোরিতে সেভ করুন (Save to Phone Storage)", fontWeight = FontWeight.SemiBold)
+                }
             }
         }
 

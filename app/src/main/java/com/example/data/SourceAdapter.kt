@@ -164,6 +164,7 @@ class OfficialEporchaAdapter(
             append("Classification: NAL / CHALA / BHITI\n")
             append("Status: Official Public Record Verified\n")
             append("Authentication: Public Citizen Free Extraction (eporcha.gov.bd)\n")
+            append("Tracking: JOB_${job.id}_MOUZA_${job.mouzaId}_JL${job.jlNumber}\n")
             append("Date: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}\n")
         }
 
@@ -243,9 +244,10 @@ class TestMockAdapter(
                 append("%âãÏÓ\n")
                 append("1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj\n")
                 append("2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj\n")
-                append("3 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]>> endobj\n")
-                append("xref\n0 4\n0000000000 65535 f \n0000000015 00000 n \n0000000068 00000 n \n0000000125 00000 n \n")
-                append("trailer <</Size 4 /Root 1 0 R>>\nstartxref\n198\n%%EOF\n")
+                append("3 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >> endobj\n")
+                append("4 0 obj <</Length 80>> stream\nBT /F1 12 Tf 50 700 Td (Record ${job.id} Mouza ${job.mouzaId} JL ${job.jlNumber} Type ${job.recordType.name}) Tj ET\nendstream endobj\n")
+                append("xref\n0 5\n0000000000 65535 f \n0000000015 00000 n \n0000000068 00000 n \n0000000125 00000 n \n0000000280 00000 n \n")
+                append("trailer <</Size 5 /Root 1 0 R>>\nstartxref\n410\n%%EOF\n")
             }
             targetTempFile.writeBytes(validPdfContent.toByteArray(Charsets.ISO_8859_1))
             return SourceDownloadResult.Success(
