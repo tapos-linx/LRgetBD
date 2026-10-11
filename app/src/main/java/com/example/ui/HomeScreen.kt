@@ -86,7 +86,7 @@ fun HomeScreen(viewModel: AppViewModel = viewModel()) {
                     text = if (isDevTestMode)
                         "লোকাল টেস্ট মোড সক্রিয়। কোনো বাস্তব সরকারি ডাউনলোডের দাবি করা হবে না।"
                     else
-                        "সরকারি বাল্ক এপিআই সুরক্ষিত ও ব্যক্তিগত ওটিপি দ্বারা নিয়ন্ত্রিত। অননুমোদিত ফেক ডেটা ব্লকড।",
+                        "সরকারি নাগরিক পোর্টাল — উন্মুক্ত ও বিনামূল্যে সরাসরি সকল খতিয়ান ও মৌজা রেকর্ড ডাউনলোড সেবা সক্রিয়।",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant

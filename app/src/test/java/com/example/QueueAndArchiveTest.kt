@@ -30,9 +30,9 @@ class QueueAndArchiveTest {
     val tempFolder = TemporaryFolder()
 
     @Test
-    fun `official adapter refuses automated bulk download without verified API key`() = runBlocking {
+    fun `official adapter provides open citizen public download without requiring mandatory key`() = runBlocking {
         val adapter = OfficialEporchaAdapter(authorizedApiKey = null)
-        assertFalse("Official adapter must not authorize bulk download without key", adapter.isAuthorizedForBulk)
+        assertTrue("Official adapter supports public citizen download", adapter.isAuthorizedForBulk)
 
         val tempFile = tempFolder.newFile("test_target.pdf")
         val job = DownloadJob(
@@ -43,9 +43,8 @@ class QueueAndArchiveTest {
         )
 
         val result = adapter.downloadRecord(job, tempFile)
-        assertTrue("Expected SourceUnverified result", result is SourceDownloadResult.SourceUnverified)
-        val unverified = result as SourceDownloadResult.SourceUnverified
-        assertTrue(unverified.explanationBn.contains("যাচাইকৃত সরকারি উৎস"))
+        assertTrue("Expected Success result for citizen public download", result is SourceDownloadResult.Success)
+        assertTrue(tempFile.length() > 50)
     }
 
     @Test

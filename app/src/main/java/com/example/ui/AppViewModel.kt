@@ -5,16 +5,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.example.LRgetBDApplication
 import com.example.data.AreaRepository
-import com.example.model.CatalogueSource
 import com.example.model.District
 import com.example.model.Division
+import com.example.model.DocumentTypeItem
 import com.example.model.DownloadJob
 import com.example.model.DownloadStatus
 import com.example.model.Mouza
@@ -28,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -55,15 +55,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedMouzas = MutableStateFlow<Set<String>>(emptySet())
     val selectedMouzas = _selectedMouzas.asStateFlow()
 
-    private val _selectedSurveyType = MutableStateFlow(SurveyType.RS)
-    val selectedSurveyType = _selectedSurveyType.asStateFlow()
+    // Auto-select all Mouzas toggle (Default: true)
+    private val _autoSelectMouzas = MutableStateFlow(true)
+    val autoSelectMouzas = _autoSelectMouzas.asStateFlow()
 
-    private val _selectedRecordType = MutableStateFlow(RecordType.KHATIAN)
-    val selectedRecordType = _selectedRecordType.asStateFlow()
+    // Multi-select Document Types (CS, SA, RS, BS, BRS, Mutation, Map)
+    private val _selectedDocumentTypes = MutableStateFlow<Set<String>>(
+        setOf("RS_KHATIAN", "CS_KHATIAN", "SA_KHATIAN")
+    )
+    val selectedDocumentTypes = _selectedDocumentTypes.asStateFlow()
 
     // Batch configuration: default 7 Mouzas per batch as mandated
     private val _batchSize = MutableStateFlow(7)
     val batchSize = _batchSize.asStateFlow()
+
+    // Upazila Mouza Directory Density (50, 100, 200 mouzas)
+    private val _mouzaDensity = MutableStateFlow(AreaRepository.getMouzaDensity())
+    val mouzaDensity = _mouzaDensity.asStateFlow()
 
     // Dev test mode switch (Explicitly labeled for testing/inspection)
     private val _isDevTestMode = MutableStateFlow(false)
@@ -77,6 +85,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiMessage.value = null
     }
 
+    fun setMouzaDensity(count: Int) {
+        _mouzaDensity.value = count
+        AreaRepository.setMouzaDensity(count)
+        val currentUpazila = _selectedUpazila.value
+        if (currentUpazila != null) {
+            val availableMouzas = AreaRepository.getMouzas(currentUpazila.id)
+            if (_autoSelectMouzas.value) {
+                _selectedMouzas.value = availableMouzas.map { it.id }.toSet()
+            }
+        }
+    }
+
     fun setDevTestMode(enabled: Boolean) {
         _isDevTestMode.value = enabled
     }
@@ -84,6 +104,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setBatchSize(size: Int) {
         if (size in 1..50) {
             _batchSize.value = size
+        }
+    }
+
+    fun setAutoSelectMouzas(enabled: Boolean) {
+        _autoSelectMouzas.value = enabled
+        if (enabled && _selectedUpazila.value != null) {
+            val availableMouzas = AreaRepository.getMouzas(_selectedUpazila.value!!.id)
+            _selectedMouzas.value = availableMouzas.map { it.id }.toSet()
         }
     }
 
@@ -114,8 +142,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _selectedUpazila.value = upazila
         if (upazila != null) {
             val availableMouzas = AreaRepository.getMouzas(upazila.id)
-            // Automatically select all verified Mouzas under this Upazila
-            _selectedMouzas.value = availableMouzas.map { it.id }.toSet()
+            if (_autoSelectMouzas.value) {
+                // Automatically select all verified Mouzas under this Upazila
+                _selectedMouzas.value = availableMouzas.map { it.id }.toSet()
+            } else {
+                _selectedMouzas.value = emptySet()
+            }
         } else {
             _selectedMouzas.value = emptySet()
         }
@@ -139,51 +171,85 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _selectedMouzas.value = emptySet()
     }
 
-    fun setSurveyType(type: SurveyType) {
-        _selectedSurveyType.value = type
+    /**
+     * Document Types Granular Selection Controls
+     */
+    fun toggleDocumentType(typeId: String) {
+        val current = _selectedDocumentTypes.value.toMutableSet()
+        if (current.contains(typeId)) {
+            if (current.size > 1) { // Keep at least 1 document type
+                current.remove(typeId)
+            } else {
+                _uiMessage.value = "কমপক্ষে একটি রেকর্ডের ধরণ নির্বাচিত থাকতে হবে।"
+            }
+        } else {
+            current.add(typeId)
+        }
+        _selectedDocumentTypes.value = current
     }
 
-    fun setRecordType(type: RecordType) {
-        _selectedRecordType.value = type
+    fun selectAllDocumentTypes() {
+        _selectedDocumentTypes.value = DocumentTypeItem.ALL_AVAILABLE.map { it.id }.toSet()
+    }
+
+    fun deselectAllDocumentTypes() {
+        // Keep default RS Khatian
+        _selectedDocumentTypes.value = setOf("RS_KHATIAN")
     }
 
     /**
      * Start Collection Pipeline:
-     * Splits selected Mouzas into batches (default 7) and schedules background execution.
+     * Generates jobs for every selected Mouza multiplied by every selected Document Type,
+     * maintaining controlled network concurrency (max 3 concurrent workers) and chunked batches.
      */
     fun startCollection() {
         val upazila = _selectedUpazila.value ?: return
         val mouzaIds = _selectedMouzas.value
-        if (mouzaIds.isEmpty()) return
+        if (mouzaIds.isEmpty()) {
+            _uiMessage.value = "অনুগ্রহ করে কমপক্ষে একটি মৌজা নির্বাচন করুন।"
+            return
+        }
+
+        val docTypeIds = _selectedDocumentTypes.value
+        if (docTypeIds.isEmpty()) {
+            _uiMessage.value = "অনুগ্রহ করে কমপক্ষে একটি ডকুমেন্টের ধরণ নির্বাচন করুন।"
+            return
+        }
 
         val division = _selectedDivision.value
         val district = _selectedDistrict.value
-        val survey = _selectedSurveyType.value
-        val record = _selectedRecordType.value
         val testMode = _isDevTestMode.value
         val allAvailableMouzas = AreaRepository.getMouzas(upazila.id).associateBy { it.id }
+        val docTypeMap = DocumentTypeItem.ALL_AVAILABLE.associateBy { it.id }
 
         viewModelScope.launch {
             val batchId = UUID.randomUUID().toString().take(8)
-            val jobsToInsert = mouzaIds.mapNotNull { mouzaId ->
-                val mouza = allAvailableMouzas[mouzaId] ?: return@mapNotNull null
-                DownloadJob(
-                    divisionId = division?.id ?: 0,
-                    divisionName = division?.bnName ?: "",
-                    districtId = district?.id ?: 0,
-                    districtName = district?.bnName ?: "",
-                    upazilaId = upazila.id,
-                    upazilaName = upazila.bnName,
-                    mouzaId = mouza.id,
-                    mouzaName = mouza.bnName,
-                    jlNumber = mouza.jlNumber,
-                    surveyType = survey,
-                    recordType = record,
-                    recordIdentifier = "ALL",
-                    sourceName = if (testMode) "TEST_FIXTURE_DEV" else "EPORCHA_BD",
-                    status = DownloadStatus.PENDING,
-                    batchId = batchId
-                )
+            val jobsToInsert = mutableListOf<DownloadJob>()
+
+            mouzaIds.forEach { mouzaId ->
+                val mouza = allAvailableMouzas[mouzaId] ?: return@forEach
+                docTypeIds.forEach { docTypeId ->
+                    val docType = docTypeMap[docTypeId] ?: return@forEach
+                    jobsToInsert.add(
+                        DownloadJob(
+                            divisionId = division?.id ?: 0,
+                            divisionName = division?.bnName ?: "",
+                            districtId = district?.id ?: 0,
+                            districtName = district?.bnName ?: "",
+                            upazilaId = upazila.id,
+                            upazilaName = upazila.bnName,
+                            mouzaId = mouza.id,
+                            mouzaName = mouza.bnName,
+                            jlNumber = mouza.jlNumber,
+                            surveyType = docType.surveyType,
+                            recordType = docType.recordType,
+                            recordIdentifier = "ALL",
+                            sourceName = if (testMode) "TEST_FIXTURE_DEV" else "EPORCHA_BD",
+                            status = DownloadStatus.PENDING,
+                            batchId = batchId
+                        )
+                    )
+                }
             }
 
             val insertedIds = dao.insertJobs(jobsToInsert)
@@ -195,7 +261,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             // Process sequentially in batches of batchSize (default 7)
             val batchChunkSize = _batchSize.value
-            insertedIds.chunked(batchChunkSize).forEachIndexed { chunkIndex, chunkIds ->
+            insertedIds.chunked(batchChunkSize).forEachIndexed { _, chunkIds ->
                 chunkIds.forEach { id ->
                     val request = OneTimeWorkRequestBuilder<DownloadWorker>()
                         .setConstraints(constraints)
@@ -213,8 +279,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            _uiMessage.value = "${mouzaIds.size} টি মৌজার জন্য সংগ্রহ কার্যসারি শুরু হয়েছে。"
+            _uiMessage.value = "${mouzaIds.size} টি মৌজার জন্য মোট ${jobsToInsert.size} টি রেকর্ডের সংগ্রহ কার্যসারি শুরু হয়েছে।"
         }
+    }
+
+    /**
+     * Master Upazila Extraction:
+     * Selects all mouzas belonging to the chosen upazila, ensures document types are active,
+     * and downloads all documents in one go into the master folder LR_BD_Records_[UpazilaName].
+     */
+    fun downloadEntireUpazila() {
+        val upazila = _selectedUpazila.value ?: run {
+            _uiMessage.value = "অনুগ্রহ করে প্রথমে একটি উপজেলা নির্বাচন করুন।"
+            return
+        }
+        val allMouzas = AreaRepository.getMouzas(upazila.id)
+        _selectedMouzas.value = allMouzas.map { it.id }.toSet()
+        if (_selectedDocumentTypes.value.isEmpty()) {
+            selectAllDocumentTypes()
+        }
+        startCollection()
     }
 
     /**
@@ -224,7 +308,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             dao.pauseActiveJobs()
             workManager.cancelAllWorkByTag("lrgetbd_batch")
-            _uiMessage.value = "চলমান সংগ্রহ স্থগিত করা হয়েছে。"
+            _uiMessage.value = "চলমান সংগ্রহ স্থগিত করা হয়েছে।"
         }
     }
 

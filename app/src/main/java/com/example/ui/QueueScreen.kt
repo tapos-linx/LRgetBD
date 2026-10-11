@@ -3,20 +3,26 @@ package com.example.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
@@ -30,7 +36,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,8 +61,18 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
 
     var selectedFilter by remember { mutableStateOf("ALL") }
 
+    val total = jobs.size
+    val completedCount = jobs.count { it.status == DownloadStatus.VALIDATED || it.status == DownloadStatus.VERIFIED || it.status == DownloadStatus.DUPLICATE }
+    val activeJobs = jobs.filter { it.status == DownloadStatus.PENDING || it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.PROCESSING || it.status == DownloadStatus.READY_TO_DOWNLOAD || it.status == DownloadStatus.VALIDATING }
+    val pausedCount = jobs.count { it.status == DownloadStatus.PAUSED }
+    val failedCount = jobs.count { it.status == DownloadStatus.FAILED || it.status == DownloadStatus.INCOMPLETE || it.status == DownloadStatus.SOURCE_UNVERIFIED }
+    val authCount = jobs.count { it.status == DownloadStatus.AUTH_REQUIRED || it.status == DownloadStatus.ACCESS_RESTRICTED }
+
+    val overallPercentage = if (total > 0) ((completedCount.toFloat() / total.toFloat()) * 100).toInt() else 0
+    val activeJob = activeJobs.firstOrNull { it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.PROCESSING || it.status == DownloadStatus.READY_TO_DOWNLOAD || it.status == DownloadStatus.VALIDATING }
+
     val filteredJobs = when (selectedFilter) {
-        "ACTIVE" -> jobs.filter { it.status == DownloadStatus.PENDING || it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.VALIDATING }
+        "ACTIVE" -> activeJobs
         "PAUSED" -> jobs.filter { it.status == DownloadStatus.PAUSED }
         "FAILED" -> jobs.filter { it.status == DownloadStatus.FAILED || it.status == DownloadStatus.INCOMPLETE || it.status == DownloadStatus.SOURCE_UNVERIFIED }
         "AUTH" -> jobs.filter { it.status == DownloadStatus.AUTH_REQUIRED || it.status == DownloadStatus.ACCESS_RESTRICTED }
@@ -61,26 +80,75 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
         else -> jobs
     }
 
-    val activeCount = jobs.count { it.status == DownloadStatus.PENDING || it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.VALIDATING }
-    val pausedCount = jobs.count { it.status == DownloadStatus.PAUSED }
-    val failedCount = jobs.count { it.status == DownloadStatus.FAILED || it.status == DownloadStatus.INCOMPLETE || it.status == DownloadStatus.SOURCE_UNVERIFIED }
-    val authCount = jobs.count { it.status == DownloadStatus.AUTH_REQUIRED || it.status == DownloadStatus.ACCESS_RESTRICTED }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
+        // Overall Queue & Batch Progress Tracker Card
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
-            Text(
-                text = "কার্যসারি (মোট ${jobs.size} টি)",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "সার্বিক সংগ্রহ অগ্রগতি (Overall Progress)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "$overallPercentage%",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                LinearProgressIndicator(
+                    progress = { overallPercentage / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "মোট ফাইল: $total টি • সম্পন্ন: $completedCount টি",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = if (activeJob != null) "বর্তমান: ${activeJob.mouzaName}" else "অপেক্ষমান",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
         }
 
         // Action Control Buttons: Pause, Resume, Cancel, Retry
@@ -90,7 +158,7 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
         ) {
             FilledTonalButton(
                 onClick = { viewModel.pauseQueue() },
-                enabled = activeCount > 0,
+                enabled = activeJobs.isNotEmpty(),
                 modifier = Modifier
                     .weight(1f)
                     .testTag("pause_queue_button")
@@ -112,7 +180,7 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
 
             OutlinedButton(
                 onClick = { viewModel.cancelQueue() },
-                enabled = activeCount > 0 || pausedCount > 0,
+                enabled = activeJobs.isNotEmpty() || pausedCount > 0,
                 modifier = Modifier
                     .weight(1f)
                     .testTag("cancel_queue_button"),
@@ -123,7 +191,7 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
             }
         }
 
-        // Retry Row
+        // Retry Controls Row
         if (failedCount > 0 || authCount > 0) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -162,12 +230,12 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
             FilterChip(
                 selected = selectedFilter == "ALL",
                 onClick = { selectedFilter = "ALL" },
-                label = { Text("সব (${jobs.size})") }
+                label = { Text("সব ($total)") }
             )
             FilterChip(
                 selected = selectedFilter == "ACTIVE",
                 onClick = { selectedFilter = "ACTIVE" },
-                label = { Text("চলমান ($activeCount)") }
+                label = { Text("চলমান (${activeJobs.size})") }
             )
             FilterChip(
                 selected = selectedFilter == "PAUSED",
@@ -181,7 +249,7 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
             )
         }
 
-        // Job List
+        // Job List with LandRecordStatusCard and 0-100% Download Meters
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -200,7 +268,10 @@ fun QueueScreen(viewModel: AppViewModel = viewModel()) {
             }
 
             items(filteredJobs, key = { it.id }) { job ->
-                JobItem(job)
+                LandRecordStatusCard(
+                    job = job,
+                    onRetry = { viewModel.retryFailedJobs() }
+                )
             }
         }
 

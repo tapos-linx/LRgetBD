@@ -33,15 +33,16 @@ class ArchiveFileManager(private val context: Context) {
         checksum: String,
         safTreeUriString: String?
     ): ArchiveResult {
-        val divisionSafe = sanitizeFileName(if (job.divisionName.isNotBlank()) job.divisionName else "Division_${job.divisionId}")
-        val districtSafe = sanitizeFileName(if (job.districtName.isNotBlank()) job.districtName else "District_${job.districtId}")
         val upazilaSafe = sanitizeFileName(if (job.upazilaName.isNotBlank()) job.upazilaName else "Upazila_${job.upazilaId}")
-        val mouzaSafe = sanitizeFileName(if (job.mouzaName.isNotBlank()) "${job.mouzaName}_JL${job.jlNumber}" else "Mouza_${job.mouzaId}")
+        val mouzaSafe = sanitizeFileName(if (job.mouzaName.isNotBlank()) job.mouzaName else "Mouza_${job.mouzaId}")
+        val jlSafe = sanitizeFileName(if (job.jlNumber.isNotBlank()) job.jlNumber else "0")
         val surveySafe = sanitizeFileName(job.surveyType.name)
         val recordTypeSafe = sanitizeFileName(job.recordType.name)
 
-        val relativeSubPath = "LRgetBD/Bangladesh/$divisionSafe/$districtSafe/$upazilaSafe/$mouzaSafe/$surveySafe/$recordTypeSafe"
-        val baseFileName = "${recordTypeSafe}_${job.recordIdentifier}_${checksum.take(8)}"
+        val masterFolderName = "LR_BD_Records_$upazilaSafe"
+        val mouzaFolderName = "Mouza_${jlSafe}_$mouzaSafe"
+        val relativeSubPath = "$masterFolderName/$mouzaFolderName"
+        val baseFileName = "${recordTypeSafe}_${surveySafe}_${job.recordIdentifier}_${checksum.take(8)}"
         val targetFileName = "$baseFileName.pdf"
 
         // Check if SAF URI is provided and valid
@@ -51,8 +52,8 @@ class ArchiveFileManager(private val context: Context) {
                 val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
                 if (rootDoc != null && rootDoc.canWrite()) {
                     var currentDir: DocumentFile = rootDoc
-                    // Navigate/create path segments
-                    for (segment in listOf("LRgetBD", "Bangladesh", divisionSafe, districtSafe, upazilaSafe, mouzaSafe, surveySafe, recordTypeSafe)) {
+                    // Navigate/create Master Folder and Mouza subfolder
+                    for (segment in listOf(masterFolderName, mouzaFolderName)) {
                         val subDir = currentDir.findFile(segment)
                         val nextDir = if (subDir == null || !subDir.isDirectory) {
                             currentDir.createDirectory(segment) ?: currentDir
@@ -161,6 +162,19 @@ class ArchiveFileManager(private val context: Context) {
 
             manifestArray.put(entry)
             manifestFile.writeText(manifestArray.toString(2))
+
+            // Also maintain Upazila Master Index in parent folder (LR_BD_Records_[Upazila])
+            val parentDir = dir.parentFile
+            if (parentDir != null && parentDir.name.startsWith("LR_BD_Records_")) {
+                val masterIndexFile = File(parentDir, "master_upazila_index.json")
+                val masterArray = if (masterIndexFile.exists()) {
+                    try { JSONArray(masterIndexFile.readText()) } catch (e: Exception) { JSONArray() }
+                } else {
+                    JSONArray()
+                }
+                masterArray.put(entry)
+                masterIndexFile.writeText(masterArray.toString(2))
+            }
         } catch (e: Exception) {
             // Manifest write best-effort
         }

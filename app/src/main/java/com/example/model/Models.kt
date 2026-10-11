@@ -51,12 +51,36 @@ enum class SurveyType(val displayName: String, val bnName: String) {
     RS("RS", "আরএস (Revisional Survey)"),
     BS("BS", "বিএস (Bangladesh Survey)"),
     BRS("BRS", "বিআরএস (City/Modern Survey)"),
+    MUTATION("MUTATION", "নামজারি খতিয়ান (Mutation)"),
     OTHER("OTHER", "অন্যান্য")
 }
 
 enum class RecordType(val displayName: String, val bnName: String) {
     KHATIAN("Khatian", "খতিয়ান / পরচা"),
     MAP("Map", "নকশা / মৌজা ম্যাপ")
+}
+
+@Serializable
+data class DocumentTypeItem(
+    val id: String,
+    val surveyType: SurveyType,
+    val recordType: RecordType,
+    val titleBn: String,
+    val subtitleBn: String = ""
+) {
+    companion object {
+        val ALL_AVAILABLE = listOf(
+            DocumentTypeItem("RS_KHATIAN", SurveyType.RS, RecordType.KHATIAN, "আরএস খতিয়ান", "Revisional Survey"),
+            DocumentTypeItem("CS_KHATIAN", SurveyType.CS, RecordType.KHATIAN, "সিএস খতিয়ান", "Cadastral Survey"),
+            DocumentTypeItem("SA_KHATIAN", SurveyType.SA, RecordType.KHATIAN, "এসএ খতিয়ান", "State Acquisition"),
+            DocumentTypeItem("BS_KHATIAN", SurveyType.BS, RecordType.KHATIAN, "বিএস খতিয়ান", "Bangladesh Survey"),
+            DocumentTypeItem("BRS_KHATIAN", SurveyType.BRS, RecordType.KHATIAN, "বিআরএস খতিয়ান", "City Survey"),
+            DocumentTypeItem("MUTATION_KHATIAN", SurveyType.MUTATION, RecordType.KHATIAN, "নামজারি খতিয়ান", "Mutation Khatian"),
+            DocumentTypeItem("RS_MAP", SurveyType.RS, RecordType.MAP, "আরএস নকশা (ম্যাপ)", "Cadastral Sheet"),
+            DocumentTypeItem("CS_MAP", SurveyType.CS, RecordType.MAP, "সিএস নকশা (ম্যাপ)", "Original Sheet"),
+            DocumentTypeItem("BS_MAP", SurveyType.BS, RecordType.MAP, "বিএস নকশা (ম্যাপ)", "Modern Sheet")
+        )
+    }
 }
 
 enum class DownloadStatus(val bnTitle: String) {
